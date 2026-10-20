@@ -1,7 +1,7 @@
 const contentEl = document.getElementById('content');
 
 function escapeHtml(value) {
-  return value
+  return String(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -20,21 +20,31 @@ function renderMarkdown(markdown) {
   const lines = markdown.split(/\r?\n/);
   const blocks = [];
   let paragraph = [];
+  let currentListType = null;
   let listItems = [];
 
   const flushParagraph = () => {
     if (paragraph.length) {
-      const text = paragraph.join(' ');
-      blocks.push(`<p>${formatInline(text)}</p>`);
+      blocks.push(`<p>${formatInline(paragraph.join(' '))}</p>`);
       paragraph = [];
     }
   };
 
   const flushList = () => {
-    if (listItems.length) {
-      blocks.push(`<ul>${listItems.map((item) => `<li>${formatInline(item)}</li>`).join('')}</ul>`);
-      listItems = [];
+    if (!listItems.length) return;
+
+    const markup = listItems
+      .map((item) => `<li>${formatInline(item)}</li>`)
+      .join('');
+
+    if (currentListType === 'ol') {
+      blocks.push(`<ol>${markup}</ol>`);
+    } else {
+      blocks.push(`<ul>${markup}</ul>`);
     }
+
+    listItems = [];
+    currentListType = null;
   };
 
   for (const rawLine of lines) {
@@ -67,8 +77,22 @@ function renderMarkdown(markdown) {
       continue;
     }
 
+    if (/^\d+\.\s+/.test(line)) {
+      flushParagraph();
+      if (currentListType !== 'ol') {
+        flushList();
+        currentListType = 'ol';
+      }
+      listItems.push(line.replace(/^\d+\.\s+/, ''));
+      continue;
+    }
+
     if (/^[-*]\s+/.test(line)) {
       flushParagraph();
+      if (currentListType !== 'ul') {
+        flushList();
+        currentListType = 'ul';
+      }
       listItems.push(line.replace(/^[-*]\s+/, ''));
       continue;
     }
@@ -91,7 +115,7 @@ function renderMarkdown(markdown) {
 
 async function loadPage() {
   try {
-    const response = await fetch('message.txt');
+    const response = await fetch('message.txt', { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
