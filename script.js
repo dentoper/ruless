@@ -9,6 +9,17 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function slugify(value) {
+  return String(value)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
 function formatInline(text) {
   return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -66,14 +77,18 @@ function renderMarkdown(markdown) {
     if (line.startsWith('## ')) {
       flushParagraph();
       flushList();
-      blocks.push(`<h2>${formatInline(line.replace(/^##\s*/, ''))}</h2>`);
+      const headingText = line.replace(/^##\s*/, '');
+      const headingId = slugify(headingText);
+      blocks.push(`<h2 id="${headingId}">${formatInline(headingText)}</h2>`);
       continue;
     }
 
     if (line.startsWith('# ')) {
       flushParagraph();
       flushList();
-      blocks.push(`<h1>${formatInline(line.replace(/^#\s*/, ''))}</h1>`);
+      const headingText = line.replace(/^#\s*/, '');
+      const headingId = slugify(headingText);
+      blocks.push(`<h1 id="${headingId}">${formatInline(headingText)}</h1>`);
       continue;
     }
 
@@ -113,6 +128,27 @@ function renderMarkdown(markdown) {
   return blocks.join('\n');
 }
 
+function renderToc() {
+  const tocEl = document.getElementById('toc');
+  if (!tocEl) return;
+
+  const headings = document.querySelectorAll('.content h2');
+  if (!headings.length) {
+    tocEl.innerHTML = '<p class="toc-empty">Разделы отсутствуют</p>';
+    return;
+  }
+
+  const items = Array.from(headings)
+    .map((heading) => {
+      const text = heading.textContent.trim();
+      const id = heading.getAttribute('id');
+      return `<li><a href="#${id}">${text}</a></li>`;
+    })
+    .join('');
+
+  tocEl.innerHTML = `<ul>${items}</ul>`;
+}
+
 async function loadPage() {
   try {
     const response = await fetch('message.txt', { cache: 'no-store' });
@@ -122,6 +158,7 @@ async function loadPage() {
 
     const text = await response.text();
     contentEl.innerHTML = renderMarkdown(text);
+    renderToc();
   } catch (error) {
     contentEl.innerHTML = `
       <h1>Ошибка загрузки содержимого</h1>
